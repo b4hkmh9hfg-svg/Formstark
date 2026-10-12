@@ -1,0 +1,4 @@
+# Sicherungen und Geheimnisse gehören nie ins (öffentliche) Repository
+*.json
+.env
+node_modules/
