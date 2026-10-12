@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Formstark Umzug</title>
+<style>
+:root{--bg:#faf7f2;--card:#fff;--ink:#2b2622;--mut:#7a7068;--acc:#b8893a;--ok:#2f7d4f;--err:#b3382c;--line:#e8e0d4}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1917;--card:#26221f;--ink:#f1ebe3;--mut:#a79d92;--line:#3a342f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 -apple-system,system-ui,sans-serif;padding:20px 16px 60px}
+main{max-width:560px;margin:0 auto}
+h1{font-size:26px;margin:8px 0 4px}
+p{margin:8px 0}
+.mut{color:var(--mut);font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:16px 0}
+input[type=email],input[type=password],textarea{width:100%;font:16px/1.4 -apple-system,system-ui,sans-serif;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);margin-top:6px}
+textarea{font:15px/1.4 ui-monospace,monospace;min-height:90px}
+button{font:600 17px -apple-system,system-ui,sans-serif;background:var(--acc);color:#fff;border:0;border-radius:12px;padding:14px 20px;width:100%;margin-top:12px}
+button:disabled{opacity:.5}
+label.r{display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.ok{color:var(--ok)}.err{color:var(--err)}
+table{width:100%;border-collapse:collapse;font-size:16px}td,th{padding:6px 4px;text-align:left;border-top:1px solid var(--line)}td:nth-child(n+2),th:nth-child(n+2){text-align:right}
+</style>
+</head>
+<body>
+<main>
+<h1>Formstark Umzug</h1>
+<p class="mut">Diese Seite kopiert die Daten eines alten Profils in dein neues Konto. Der alte Speicher wird nur gelesen und nicht verändert. Du kannst den Umzug gefahrlos wiederholen, es entstehen keine doppelten Einträge.</p>
+
+<div class="card" id="c1">
+<b>1. Anmelden</b>
+<p class="mut">Mit der E-Mail-Adresse und dem Passwort des neuen Kontos.</p>
+<form id="lgform" autocomplete="on">
+<input id="mail" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="E-Mail" required>
+<input id="pw" type="password" autocomplete="current-password" placeholder="Passwort" required>
+<button type="submit" id="lg">Anmelden</button>
+</form>
+<div id="m1" class="mut"></div>
+</div>
+
+<div class="card" id="c2" hidden>
+<b>2. Altes Profil wählen</b>
+<p class="mut">Füge den Einladungslink der alten App ein (er endet auf <code>#join=…</code>). Er bleibt nur im Arbeitsspeicher.</p>
+<textarea id="link" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://formstark.netlify.app/#join=…"></textarea>
+<button id="list">Profile suchen</button>
+<div id="m2" class="mut"></div>
+<div id="profiles"></div>
+</div>
+
+<div class="card" id="c3" hidden>
+<b>3. Umziehen</b>
+<p id="info" class="mut"></p>
+<label id="ow" class="r" hidden><input type="checkbox" id="conf"> <span>Im neuen Konto gibt es schon Daten. Gleiche Einträge dürfen mit dem alten Stand überschrieben werden.</span></label>
+<button id="go" disabled>Jetzt umziehen</button>
+<div id="m3" class="mut"></div>
+<div id="res"></div>
+</div>
+
+<script src="daten.js"></script>
+<script>
+(function(){
+"use strict";
+var SB_URL="https://uxiyjsbhtijrhptwlibs.supabase.co",SB_KEY="sb_publishable_sF0G1BqSIXTjOnWAjtYvjg_pZXxBYkZ";
+var $=function(i){return document.getElementById(i)};
+var tok=null,uid=null,cfg=null,old=null,rows=null,slot="me",docs=[];
+
+async function jf(url,opt){var r=await fetch(url,opt),t=await r.text(),j=null;try{j=t?JSON.parse(t):null}catch(e){j=t}return{ok:r.ok,status:r.status,data:j}}
+async function rest(method,path,body,prefer){
+  var h={apikey:SB_KEY,Authorization:"Bearer "+tok};
+  if(body!==undefined)h["Content-Type"]="application/json";
+  if(prefer)h.Prefer=prefer;
+  var r=await jf(SB_URL+"/rest/v1/"+path,{method:method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});
+  if(!r.ok)throw new Error((r.data&&(r.data.message||r.data.hint))||("Fehler "+r.status));
+  return r.data}
+
+/* --- Firestore-Werte in normales JSON --- */
+function dec(v){
+  if(v==null)return null;
+  if("stringValue" in v)return v.stringValue;
+  if("integerValue" in v)return Number(v.integerValue);
+  if("doubleValue" in v)return v.doubleValue;
+  if("booleanValue" in v)return v.booleanValue;
+  if("nullValue" in v)return null;
+  if("timestampValue" in v)return v.timestampValue;
+  if("mapValue" in v){var o={},f=v.mapValue.fields||{};for(var k in f)o[k]=dec(f[k]);return o}
+  if("arrayValue" in v)return (v.arrayValue.values||[]).map(dec);
+  return v}
+function parseLink(t){
+  var m=String(t||"").match(/#join=([^\s&]+)/),b=m?m[1]:String(t||"").trim();
+  b=decodeURIComponent(b).replace(/-/g,"+").replace(/_/g,"/");while(b.length%4)b+="=";
+  var o=JSON.parse(decodeURIComponent(escape(atob(b))));
+  if(!o||!o.c||!o.c.projectId||!o.c.apiKey||!o.t)throw new Error("fehlt");return o}
+function docUrl(name){return "https://firestore.googleapis.com/v1/projects/"+encodeURIComponent(cfg.c.projectId)+"/databases/(default)/documents/data/users/"+encodeURIComponent(cfg.t)+(name?"/"+name:"")+"?key="+encodeURIComponent(cfg.c.apiKey)+(name?"":"&pageSize=300")}
+function stateOf(doc){
+  var f=doc.fields||{};
+  if(f.j&&typeof f.j.stringValue==="string")return JSON.parse(f.j.stringValue);
+  var o={};for(var k in f)o[k]=dec(f[k]);return o}
+var NAMEN={state:"Ich (erstes Konto)",state_martin:"Martin"};
+function slotOf(id){return id==="state"?"me":id.replace(/^state_/,"")}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+
+/* --- 1. Anmelden --- */
+$("lgform").addEventListener("submit",async function(e){
+  e.preventDefault();var m=$("m1");$("lg").disabled=true;m.className="mut";m.textContent="Anmelden …";
+  try{
+    var r=await jf(SB_URL+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:SB_KEY,"Content-Type":"application/json"},body:JSON.stringify({email:$("mail").value.trim(),password:$("pw").value})});
+    if(!r.ok)throw new Error(r.status===400?"E-Mail oder Passwort stimmt nicht.":"Anmeldung nicht möglich ("+r.status+")");
+    tok=r.data.access_token;uid=r.data.user.id;
+    m.className="ok";m.textContent="Angemeldet als "+r.data.user.email;$("c2").hidden=false;$("pw").value=""
+  }catch(err){m.className="err";m.textContent=err.message}
+  $("lg").disabled=false});
+
+/* --- 2. Profile suchen --- */
+$("list").onclick=async function(){
+  var m=$("m2");m.className="mut";$("profiles").innerHTML="";$("c3").hidden=true;
+  try{cfg=parseLink($("link").value)}catch(e){m.className="err";m.textContent="Der Link ist ungültig. Kopiere den ganzen Einladungslink mit #join=… am Ende.";return}
+  m.textContent="Suche …";$("list").disabled=true;
+  try{
+    docs=[];var tokn="";
+    do{var r=await jf(docUrl("")+(tokn?"&pageToken="+encodeURIComponent(tokn):""));
+      if(!r.ok)throw new Error("Abruf fehlgeschlagen ("+r.status+")");
+      (r.data.documents||[]).forEach(function(d){var id=d.name.split("/").pop();if(/^state(_|$)/.test(id))docs.push({id:id,doc:d})});
+      tokn=r.data.nextPageToken||""}while(tokn);
+    if(!docs.length)throw new Error("Keine Profile gefunden. Stimmt der Link?");
+    var h="";docs.forEach(function(d,i){
+      var st=null;try{st=stateOf(d.doc)}catch(e){}
+      var nm=st&&st.profile&&st.profile.name,days=st&&st.log?Object.keys(st.log).length:0;
+      h+='<label class="r"><input type="radio" name="p" value="'+i+'"> <span><b>'+esc(nm||NAMEN[d.id]||d.id)+'</b><br><span class="mut">'+esc(NAMEN[d.id]||d.id)+" · "+days+" Tage</span></span></label>"});
+    $("profiles").innerHTML=h;m.className="ok";m.textContent=docs.length+" Profile gefunden. Wähle dein eigenes.";
+    Array.prototype.forEach.call(document.getElementsByName("p"),function(el){el.onchange=choose})
+  }catch(e){m.className="err";m.textContent=e.message}
+  $("list").disabled=false};
+
+/* --- 3. Vorbereiten --- */
+async function choose(ev){
+  var d=docs[+ev.target.value];$("c3").hidden=false;$("res").innerHTML="";$("m3").textContent="";$("go").disabled=true;$("ow").hidden=true;$("conf").checked=false;
+  try{
+    old=stateOf(d.doc);slot=slotOf(d.id);
+    var S=JSON.parse(JSON.stringify(old));S.slot=slot;
+    rows=FSD.sZuZeilen(S);rows.workouts.forEach(function(w){w.quelle="umzug"});
+    var pc=0;Object.keys(S.photos||{}).forEach(function(k){pc+=String(S.photos[k]).length});
+    var days=Object.keys(S.log||{}).length;
+    $("info").textContent=days+" Tage, "+rows.workouts.length+" Workouts, "+rows.eintraege.length+" Einträge, "+rows.tageswerte.length+" Tageswerte"+(pc?", Fotos "+Math.round(pc/1024)+" KB":"")+" werden kopiert.";
+    var ex=await rest("GET","profile?select=user_id&user_id=eq."+encodeURIComponent(uid));
+    var has=ex&&ex.length;
+    if(has){$("ow").hidden=false;$("go").disabled=true;$("conf").onchange=function(){$("go").disabled=!$("conf").checked}}
+    else $("go").disabled=false
+  }catch(e){$("m3").className="err";$("m3").textContent="Vorbereiten nicht möglich: "+e.message}}
+
+async function upsert(table,list,conf){
+  for(var i=0;i<list.length;i+=500){
+    var part=list.slice(i,i+500).map(function(r){return Object.assign({user_id:uid},r)});
+    await rest("POST",table+"?on_conflict="+conf,part,"resolution=merge-duplicates,return=minimal");
+    $("m3").textContent="Schreibe "+table+" … "+Math.min(i+500,list.length)+" von "+list.length}}
+
+/* --- 3. Umziehen --- */
+$("go").onclick=async function(){
+  var m=$("m3");m.className="mut";$("go").disabled=true;$("res").innerHTML="";
+  try{
+    await rest("POST","profile?on_conflict=user_id",[Object.assign({user_id:uid},rows.profile)],"resolution=merge-duplicates,return=minimal");
+    await upsert("workouts",rows.workouts,"user_id,id");
+    await upsert("eintraege",rows.eintraege,"user_id,art,id");
+    await upsert("tageswerte",rows.tageswerte,"user_id,tag,bereich");
+    /* Kontrolle: alles zurücklesen und mit dem Alten vergleichen */
+    m.textContent="Prüfe …";
+    var back={profile:null,workouts:[],eintraege:[],tageswerte:[]};
+    var p=await rest("GET","profile?select=*&user_id=eq."+encodeURIComponent(uid));back.profile=p&&p[0];
+    var order={workouts:"id",eintraege:"art,id",tageswerte:"tag,bereich"};
+    for(var t in order){for(var off=0;;off+=1000){var d=await rest("GET",t+"?select=*&user_id=eq."+encodeURIComponent(uid)+"&order="+order[t]+"&limit=1000&offset="+off);back[t]=back[t].concat(d);if(d.length<1000)break}}
+    var S2=FSD.zeilenZuS(back),S1=JSON.parse(JSON.stringify(old));
+    var d1=Object.keys(S1.log||{}).length,d2=Object.keys(S2.log||{}).length;
+    function art(list){var o={};list.forEach(function(e){o[e.art]=(o[e.art]||0)+1});return o}
+    var wk1=0;Object.keys(S1.log||{}).forEach(function(k){wk1+=((S1.log[k]||{}).wk||[]).length});
+    var wk2=back.workouts.filter(function(w){return !w.geloescht}).length;
+    var a1=art(rows.eintraege),a2=art(back.eintraege.filter(function(e){return !e.geloescht}));
+    var tr="<tr><th></th><th>alt</th><th>neu</th></tr><tr><td>Tage</td><td>"+d1+"</td><td>"+d2+"</td></tr><tr><td>Workouts</td><td>"+wk1+"</td><td>"+wk2+"</td></tr>";
+    var good=d1===d2&&wk1===wk2;
+    Object.keys(a1).sort().forEach(function(k){tr+="<tr><td>"+esc(k)+"</td><td>"+a1[k]+"</td><td>"+(a2[k]||0)+"</td></tr>";if(a1[k]!==(a2[k]||0))good=false});
+    $("res").innerHTML="<table>"+tr+"</table>";
+    m.className=good?"ok":"err";
+    m.textContent=good?"Fertig. Alle Zahlen stimmen überein. Öffne jetzt die neue App und vergleiche ein paar Tage mit der alten.":"Fertig, aber nicht alle Zahlen stimmen überein. Bitte schick mir einen Screenshot dieser Seite."
+  }catch(e){m.className="err";m.textContent="Das hat nicht geklappt: "+e.message}
+  $("go").disabled=false};
+})();
+</script>
+</main>
+</body>
+</html>

@@ -9,10 +9,10 @@
   /* Tageslisten: log[Tag].acts / .food -> eintraege; log[Tag].wk -> workouts */
   var TAGLISTEN = ["acts", "food"];
   /* Landet nicht in der Datenbank (gerätebezogen oder abgeleitet) */
-  var LOKAL = ["introSeen", "obLater", "hideInstall", "revSeen", "monSeen", "noPush", "lastBackup", "upd"];
+  var LOKAL = ["hideInstall", "noPush", "upd"];
 
   function istObj(x) { return x && typeof x === "object" && !Array.isArray(x); }
-  function kopie(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
+  function kopie(x) { return (x === undefined || x === null || typeof x !== "object") ? x : JSON.parse(JSON.stringify(x)); }
 
   /* stabile Kurz-ID aus dem Inhalt (für Einträge ohne eigene id) */
   function hash(s) {
@@ -100,8 +100,8 @@
             out.workouts.push({
               id: id, tag: tag,
               name: w.n == null ? null : String(w.n),
-              minuten: typeof w.min === "number" ? w.min : (w.min == null ? null : Number(w.min) || null),
-              gefuehl: typeof w.feel === "number" ? w.feel : null,
+              minuten: Number.isInteger(w.min) ? w.min : null,
+              gefuehl: Number.isInteger(w.feel) ? w.feel : null,
               notiz: w.note == null ? null : String(w.note),
               quelle: "app",
               uebungen: kopie(w.items || []),
