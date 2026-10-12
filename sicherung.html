@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Formstark Sicherung</title>
+<style>
+:root{--bg:#faf7f2;--card:#fff;--ink:#2b2622;--mut:#7a7068;--acc:#b8893a;--ok:#2f7d4f;--err:#b3382c;--line:#e8e0d4}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1917;--card:#26221f;--ink:#f1ebe3;--mut:#a79d92;--line:#3a342f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 -apple-system,system-ui,sans-serif;padding:20px 16px 60px}
+main{max-width:560px;margin:0 auto}
+h1{font-size:26px;margin:8px 0 4px}
+p{margin:8px 0}
+.mut{color:var(--mut);font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:16px 0}
+textarea{width:100%;font:15px/1.4 ui-monospace,monospace;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);min-height:110px}
+button{font:600 17px -apple-system,system-ui,sans-serif;background:var(--acc);color:#fff;border:0;border-radius:12px;padding:14px 20px;width:100%;margin-top:12px}
+button:disabled{opacity:.5}
+button.sec{background:transparent;color:var(--acc);border:1.5px solid var(--acc)}
+#msg{margin-top:12px;min-height:24px}
+.ok{color:var(--ok)}.err{color:var(--err)}
+</style>
+</head>
+<body>
+<main>
+<h1>Formstark Sicherung</h1>
+<p class="mut">Diese Seite lädt alle deine Formstark-Daten aus dem Online-Speicher und legt sie als eine Datei bei dir ab. Es wird nichts verändert oder gelöscht. Den Einladungslink behält die Seite nur im Arbeitsspeicher und speichert ihn nirgends.</p>
+
+<div class="card">
+<label for="link"><b>1. Einladungslink einfügen</b></label>
+<p class="mut">In Formstark: Menü → Online-Speicher → Einladungslink kopieren. Er endet auf <code>#join=…</code></p>
+<textarea id="link" placeholder="https://formstark.netlify.app/#join=…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+<button id="go">2. Sicherung erstellen</button>
+<div id="msg" class="mut"></div>
+</div>
+
+<div class="card" id="res" hidden>
+<p><b id="sum"></b></p>
+<button id="dl">Datei speichern</button>
+<button id="sh" class="sec" hidden>Teilen / in iCloud sichern</button>
+<p class="mut">Speichere die Datei zusätzlich in iCloud Drive (Dateien-App → iCloud Drive). Erst danach geht es mit dem Umbau weiter.</p>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $=function(i){return document.getElementById(i)};
+var blob=null,fname="";
+
+function parseLink(t){
+  var m=String(t||"").match(/#join=([^\s&]+)/);
+  var b=m?m[1]:String(t||"").trim();
+  b=decodeURIComponent(b).replace(/-/g,"+").replace(/_/g,"/");
+  while(b.length%4)b+="=";
+  var o=JSON.parse(decodeURIComponent(escape(atob(b))));
+  if(!o||!o.c||!o.c.projectId||!o.c.apiKey||!o.t)throw new Error("fehlt");
+  return o;
+}
+
+function dec(v){
+  if(v==null)return null;
+  if("stringValue" in v)return v.stringValue;
+  if("integerValue" in v)return Number(v.integerValue);
+  if("doubleValue" in v)return v.doubleValue;
+  if("booleanValue" in v)return v.booleanValue;
+  if("nullValue" in v)return null;
+  if("timestampValue" in v)return v.timestampValue;
+  if("mapValue" in v){var o={},f=v.mapValue.fields||{};for(var k in f)o[k]=dec(f[k]);return o}
+  if("arrayValue" in v)return (v.arrayValue.values||[]).map(dec);
+  return v;
+}
+function decDoc(d){var o={},f=d.fields||{};for(var k in f)o[k]=dec(f[k]);return o}
+
+async function fetchAll(cfg,team){
+  var docs=[],tok="",n=0;
+  do{
+    var u="https://firestore.googleapis.com/v1/projects/"+encodeURIComponent(cfg.projectId)+
+      "/databases/(default)/documents/data/users/"+encodeURIComponent(team)+
+      "?key="+encodeURIComponent(cfg.apiKey)+"&pageSize=300"+(tok?"&pageToken="+encodeURIComponent(tok):"");
+    var r=await fetch(u);
+    if(!r.ok){
+      var t="";try{t=(await r.json()).error.message}catch(e){}
+      throw new Error("Abruf fehlgeschlagen ("+r.status+")"+(t?": "+t:""));
+    }
+    var j=await r.json();
+    (j.documents||[]).forEach(function(d){docs.push(d)});
+    tok=j.nextPageToken||"";
+    $("msg").textContent="Lade … "+docs.length+" Dokumente";
+    if(++n>50)break;
+  }while(tok);
+  return docs;
+}
+
+function fmtSize(b){return b>1048576?(b/1048576).toFixed(1)+" MB":Math.max(1,Math.round(b/1024))+" KB"}
+function pad(n){return String(n).padStart(2,"0")}
+
+$("go").onclick=async function(){
+  var msg=$("msg");msg.className="mut";$("res").hidden=true;blob=null;
+  var cfg;
+  try{cfg=parseLink($("link").value)}
+  catch(e){msg.className="err";msg.textContent="Der Link ist ungültig. Kopiere den ganzen Einladungslink mit #join=… am Ende.";return}
+  $("go").disabled=true;msg.textContent="Lade …";
+  try{
+    var docs=await fetchAll(cfg.c,cfg.t);
+    if(!docs.length)throw new Error("Es wurden keine Dokumente gefunden. Stimmt der Link?");
+    var now=new Date();
+    var out={
+      art:"formstark-sicherung",version:1,erstellt:now.toISOString(),anzahl:docs.length,
+      roh:docs,
+      lesbar:docs.map(function(d){
+        return {id:d.name.split("/").pop(),aktualisiert:d.updateTime||null,daten:decDoc(d)}
+      })
+    };
+    var txt=JSON.stringify(out);
+    blob=new Blob([txt],{type:"application/json"});
+    fname="formstark-sicherung-"+now.getFullYear()+"-"+pad(now.getMonth()+1)+"-"+pad(now.getDate())+".json";
+    var ids=out.lesbar.map(function(d){return d.id}).join(", ");
+    $("sum").textContent=docs.length+" Dokumente gesichert, "+fmtSize(blob.size)+" ("+ids+")";
+    $("res").hidden=false;
+    $("sh").hidden=!(navigator.canShare&&navigator.canShare({files:[new File([blob],fname,{type:"application/json"})]}));
+    msg.className="ok";msg.textContent="Fertig. Jetzt die Datei speichern.";
+  }catch(e){
+    msg.className="err";msg.textContent=(e&&e.message)||"Das hat nicht geklappt.";
+  }finally{$("go").disabled=false}
+};
+
+$("dl").onclick=function(){
+  if(!blob)return;
+  var a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);a.download=fname;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},60000);
+};
+$("sh").onclick=async function(){
+  if(!blob)return;
+  try{await navigator.share({files:[new File([blob],fname,{type:"application/json"})]})}catch(e){}
+};
+})();
+</script>
+</main>
+</body>
+</html>
