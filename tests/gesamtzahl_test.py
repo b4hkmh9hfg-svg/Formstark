@@ -102,6 +102,23 @@ async def main():
         ok("4×12" in txt, "iPad: normale Eingabe zeigt weiter „4×12“")
         sw = await B.evaluate("document.documentElement.scrollWidth")
         ok(sw <= 769, "iPad: kein Querscrollen (%d)" % sw)
+        # Gesamtzahl mit ungefährer Anzahl Sätze: 200 in ca. 5 Sätzen -> 5 × 40 (Summe bleibt 200)
+        for sets, total, exp_r in ((5, 200, 40), (6, 200, 33)):
+            await B.wait_for_selector("#lgw-add")
+            await B.select_option("#lgw-add", "pushup")
+            await B.click("[data-a=lgwadd]")
+            await B.wait_for_selector("#lgw-r-0")
+            await B.click("[data-a=lgwtot][data-v='0']")
+            await B.wait_for_selector("#lgw-n-0")
+            await B.fill("#lgw-r-0", str(total))
+            await B.fill("#lgw-n-0", str(sets))
+            await B.click("[data-a=lgwsave]")
+            await B.wait_for_timeout(1800)
+            uebs = [r["uebungen"] for r in m.rows("workouts", SARA) if r.get("uebungen") and r["uebungen"][0].get("s") == sets]
+            ok(any(u == [{"e": "pushup", "s": sets, "r": exp_r, "u": "r", "kg": None}] for u in uebs),
+               "iPad: %d gesamt in ca. %d Sätzen wird als %d×%d gespeichert (%s)" % (total, sets, sets, exp_r, uebs[-1:] ))
+            txt = await B.inner_text("#sheetHost")
+            ok("%d×%d" % (sets, exp_r) in txt, "iPad: Anzeige %d×%d" % (sets, exp_r))
         await B.wait_for_timeout(1200)
         await B.screenshot(path="/tmp/claude-0/t/gesamt_ipad.png")
         real = [e for e in errs if "Failed to load resource" not in e]
