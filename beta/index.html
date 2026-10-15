@@ -2699,8 +2699,18 @@ function render(){const v=$("#view"),nav=document.querySelector("nav.tabs");
  if(nav)nav.hidden=false;renderTabs();renderHead();const sig=tab+"|"+(focus?focus.sid:"")+planSeg+yogaSeg+ciSeg+foodSeg+statSeg+zSeg;v.classList.toggle("anim",sig!==lastV);lastV=sig;v.innerHTML=focus?vFocus():VIEWS[tab]();mountAll(v);fabUpd();applyUrlSteps();
  if(!S.introSeen&&!introQ&&!PL){introQ=true;setTimeout(()=>{if(!S.introSeen&&!PL&&!$("#sheetHost").innerHTML)openIntro(0)},500)}}
 let urlAcc=null;try{urlAcc=new URLSearchParams(location.search).get("acc")}catch(e){}
-let urlSteps=null;try{const q=new URLSearchParams(location.search),n=Math.round(parseFloat(String(q.get("steps")||"").replace(",",".")));if(n>=0&&n<200000)urlSteps={n,d:/^\d{4}-\d{1,2}-\d{1,2}$/.test(q.get("date")||"")?q.get("date"):null}}catch(e){}
-function applyUrlSteps(){if(!urlSteps||!picked||!S.profile||mode==="loading")return;const u=urlSteps;urlSteps=null;try{history.replaceState(null,"",location.pathname)}catch(e){}const k=u.d?key(parse(u.d)):key(today());day(k).steps=u.n;persist();setTimeout(()=>{render();flash("👟 "+num(u.n)+" Schritte aus Apple Health eingetragen")},50)}
+let urlSteps=null,urlDays=null;
+const stepNum=s=>{s=String(s==null?"":s).trim();if(/^\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,"");const n=Math.round(parseFloat(s.replace(",",".")));return n>=0&&n<200000?n:null};
+try{const q=new URLSearchParams(location.search),n=stepNum(q.get("steps"));if(n!=null)urlSteps={n,d:/^\d{4}-\d{1,2}-\d{1,2}$/.test(q.get("date")||"")?q.get("date"):null};
+ const ds=q.get("days");if(ds){const L=[];ds.split(/[;\n]+|,(?=\s*\d{4}-\d{1,2}-\d{1,2})/).forEach(p=>{const m=p.trim().match(/^(\d{4}-\d{1,2}-\d{1,2})\s*[:=]\s*(.+)$/);if(m){const x=stepNum(m[2]);if(x!=null)L.push({d:m[1],n:x})}});if(L.length)urlDays=L.slice(0,62)}}catch(e){}
+function applyUrlSteps(){if(!(urlSteps||urlDays)||!picked||!S.profile||mode==="loading")return;const u=urlSteps,L=urlDays;urlSteps=null;urlDays=null;try{history.replaceState(null,"",location.pathname)}catch(e){}
+ let msg="",chg=false;
+ if(u){const k=u.d?key(parse(u.d)):key(today());day(k).steps=u.n;chg=true;msg="👟 "+num(u.n)+" Schritte aus Apple Health eingetragen"}
+ if(L){/* mehrere Tage: nur leere Tage füllen, heute darf steigen; vorhandene Werte werden nie überschrieben */
+  const tk=key(today()),first=key(addD(today(),-62));let add=0,have=0;
+  L.forEach(x=>{const p=parse(x.d);if(isNaN(+p))return;const k=key(p);if(k>tk||k<first)return;const cur=+(peek(k).steps)||0;if(k===tk?x.n>cur:(!cur&&x.n>0)){day(k).steps=x.n;add++}else if(cur)have++});
+  if(add)chg=true;msg=add?"👟 Schritte für "+add+(add===1?" Tag":" Tage")+" nachgetragen"+(have?" · "+have+" schon vorhanden":""):"👟 Nichts Neues: alle Tage sind schon eingetragen"}
+ if(chg)persist();setTimeout(()=>{render();flash(msg)},50)}
 function hdrH(){const h=document.querySelector("header.top");if(h)document.documentElement.style.setProperty("--hh",h.offsetHeight+"px")}
 try{window.addEventListener("resize",hdrH);if(window.ResizeObserver)new ResizeObserver(hdrH).observe(document.querySelector("header.top"));setTimeout(hdrH,0)}catch(e){}
 function fabUpd(){const f=$("#fab");if(!f)return;f.hidden=!(picked&&S.profile&&!obOpen&&mode!=="loading"&&!focus&&!PL&&!(tab==="plan"&&wkView==="tage"))}
