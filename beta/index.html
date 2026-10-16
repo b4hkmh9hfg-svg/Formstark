@@ -2462,6 +2462,29 @@ Object.assign(ANIM,{
  ybridge:{props:["mat"],fr:[[BR_A,1200,1800],[BR_B,2400,1800]]},
  wall:{props:["mat","wall"],fr:[[WALL_A,2200,2400],[WALL_B,2200,2400]]}
 });
+/* neue Animationen: Hampelmann, Mountain Climbers, Frontheben, Crunches, Bicycle Crunches, Kettlebell Swing */
+const JK_A=O(STAND,{e1:[103,82],h1:[106,106],e2:[98,81],h2:[100,105],k2:[94,148],f2:[93,185]});
+const JK_B=O(STAND,{head:[101,40],sh:[100,52],hip:[100,104],e1:[113,30],h1:[108,8],e2:[90,30],h2:[92,8],k1:[124,140],f1:[142,170],k2:[76,140],f2:[58,170]});
+const MC_A={head:[54,142],sh:[70,150],e1:[78,168],h1:[86,186],hip:[118,162],k1:[98,170],f1:[110,186],k2:[146,174],f2:[172,185],e2:[76,169],h2:[84,186]};
+const MC_B=O(MC_A,{k1:[146,174],f1:[172,185],k2:[98,170],f2:[110,186]});
+const GF_B=O(STAND,{e1:[127,60],h1:[153,60],e2:[123,62],h2:[149,62]});
+const CR_A={head:[34,176],sh:[50,178],e1:[42,160],h1:[36,168],hip:[104,180],k1:[130,148],f1:[152,184]};
+const CR_B=O(CR_A,{head:[55,150],sh:[66,162],e1:[54,146],h1:[50,156],mid:[87,175]});
+const BI_A={head:[55,150],sh:[66,162],e1:[54,146],h1:[50,156],hip:[108,180],mid:[88,175],k1:[98,154],f1:[124,160],k2:[142,172],f2:[176,170]};
+const BI_B=O(BI_A,{k1:[142,172],f1:[176,170],k2:[98,154],f2:[124,160]});
+const KS_A={head:[138,88],sh:[122,94],e1:[108,114],h1:[100,138],hip:[84,116],k1:[104,150],f1:[96,185],e2:[106,115],h2:[98,139]};
+const KS_B=O(STAND,{e1:[127,62],h1:[153,62],e2:[123,64],h2:[149,64],hip:[98,110],k1:[100,148]});
+Object.assign(ANIM,{
+ jack:{props:["floor"],fr:[[JK_A,150,300],[JK_B,150,300]]},
+ mclimb:{props:["floor"],fr:[[MC_A,0,330],[MC_B,0,330]]},
+ gfront:{props:["floor"],wt:["h1"],fr:[[STAND,300,1200],[GF_B,300,1100]]},
+ crunch:{props:["floor"],fr:[[CR_A,300,900],[CR_B,500,900]]},
+ bicycle:{props:["floor"],fr:[[BI_A,0,650],[BI_B,0,650]]},
+ kbswing:{props:["floor"],wt:["h1"],fr:[[KS_A,100,550],[KS_B,200,550]]}
+});
+
+/* passendere Animationen für einzelne Übungen */
+[["jacks","jack"],["mclimb","mclimb"],["gfront","gfront"],["bandfront","gfront"],["crunch","crunch"],["bicycle","bicycle"],["kbswing","kbswing"],["cobra","cobra"]].forEach(([id,a])=>{if(EX[id]&&ANIM[a])EX[id].anim=a});
 const YAL={crow:"squat",frog:"puppyk",chair:"squat",board:"plank",triangle:"war2",sideangle:"war2",crescent:"war1",halffold:"utt",ragdoll:"utt",widefold:"utt",sideb:"tadup",tree:"tada",garland:"squat",reclbutter:"butter",knees:"happy",boat:"hollow",locust:"superman",needle:"puppyk",seatedtwist:"sukha",headknee:"seatfold"};
 const YANIM=id=>YAL[id]||(id==="bridge"?"ybridge":id);
 const YT={bala:"none",sava:"none",wall:"none",sukha:"core",anjali:"core",neck:"sh",puppyk:"sh",shoulder:"core",fish:"sh",puppy:"sh",pigeon:"hip",fig4:"hip",lunge:"hip",happy:"hip",butter:"hip",leg:"hip",dog:"hip",bridge:"hip",ybridge:"hip"};
@@ -3794,7 +3817,7 @@ function curStep(){return PL.steps[PL.i]}
 function repTarget(v){return v.att?1:target(v,PL.w)}
 function plBegin(){ // 3-2-1 → work
  if(!ac)try{beep.call(null,true)}catch(e){}
- const [e,v]=curStep();PL.ph="count";PL.run=true;PL.cEnd=now()+3000;PL.lastC=4;
+ const [e,v]=curStep();PL.ph="count";PL.cues=false;PL.run=true;PL.cEnd=now()+3000;PL.lastC=4;
  say((v.wu?"":(v.att?"Versuch ":"Satz ")+(PL.s+1)+". ")+EX[e].n+". Drei, zwei, eins.");plRender();
 }
 function plWork(){
@@ -3855,7 +3878,7 @@ function plRender(){
     ${PL.cues?`<div class="cuesbox"><div class="row between"><h2>${ex.n}</h2><button class="iconbtn" data-a="plcues" aria-label="Technik schließen">×</button></div><ol class="cues">${ex.cues.map(c=>`<li>${c}</li>`).join("")}</ol><h3>Typische Fehler</h3><ul class="cues miss">${ex.miss.map(c=>`<li>${c}</li>`).join("")}</ul>${ex.alt?`<div class="note">${ex.alt}</div>`:""}</div>`:""}</div>
    <div class="pl-info"><div class="pl-name">${ex.n}</div><div class="pl-meta">${v.wu?"Aufwärmen · "+v.lo+" Sek.":(v.att?"Versuch":"Satz")+" "+(s+1)+" von "+(v.sl||v.s)+" · "+(v.att?"1 sauberer Versuch":(timed?target(v,w)+" Sek.":target(v,w)+" Wiederholungen")+(v.side?" je Seite":""))}</div>
     ${ex.kg!=null&&!v.wu?`<div class="kgrow"><button class="iconbtn" data-a="kgadj" data-v="-2.5" aria-label="Weniger Gewicht">−</button><b id="pl-kg">${num(kgOf(PL.k,PL.sid,eid))} kg</b><button class="iconbtn" data-a="kgadj" data-v="2.5" aria-label="Mehr Gewicht">+</button>${lastKg(eid,PL.k)!=null?`<small class="muted">zuletzt ${num(lastKg(eid,PL.k))} kg</small>`:""}</div>`:""}
-    <div class="pl-cue">${isRest?(modOn("tipps")?(PL.tipEid=eid,PL.tipAt=null,`<div id="pl-tip">${restTip(eid)}</div><button class="textbtn" style="padding:6px 0;color:var(--accent);font-size:13px" data-a="pltip">Nächster Tipp ›</button>`):""):v.wu?ex.cues[0]:exNote(eid,v,w)+" · <button class='textbtn' style='padding:0;color:var(--accent);font-size:14px' data-a='plcues'>Technik</button>"}</div></div>
+    <div class="pl-cue">${isRest?((modOn("tipps")?(PL.tipEid=eid,PL.tipAt=null,`<div id="pl-tip">${restTip(eid)}</div><button class="textbtn" style="padding:6px 0;color:var(--accent);font-size:13px" data-a="pltip">Nächster Tipp ›</button>`):"")+`<div><button class="textbtn" style="padding:6px 0;color:var(--accent);font-size:13px" data-a="plcues">${PL.cues?"Technik schließen":"Technik nachlesen"}</button></div>`):v.wu?ex.cues[0]:exNote(eid,v,w)+" · <button class='textbtn' style='padding:0;color:var(--accent);font-size:14px' data-a='plcues'>Technik</button>"}</div></div>
    <div class="pl-ctrl"><button class="iconbtn" data-a="plprev" aria-label="Vorherige Übung" ${i===0?"disabled":""}>‹</button>`;
    if(PL.ph==="ready")h+=`<button class="btn accent big" data-a="plbegin" style="min-width:180px">▶ ${i===0&&v.wu?"Aufwärmen starten":"Satz starten"}</button>`;
    else if(PL.ph==="count")h+=`<div class="ring">${ringSvg("var(--gold)")}<div class="num">…</div></div>`;
